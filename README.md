@@ -1,3 +1,12 @@
+---
+title: Document Intelligence Agent
+emoji: 📄
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # 05 Document Intelligence Agent
 
 A document intelligence agent that converts PDFs and text files into structured summaries, searchable chunks, and exportable data.
