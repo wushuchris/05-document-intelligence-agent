@@ -1,0 +1,40 @@
+Northstar Operations Group
+Internal Business Memo
+
+Date: March 15, 2026
+Prepared for: Executive Review Committee
+Prepared by: Operations Strategy Team
+
+Executive Summary
+
+Northstar Operations Group is evaluating a document automation initiative intended to reduce manual review time across vendor onboarding, compliance monitoring, and quarterly operating reports. The proposed system would convert uploaded documents into structured summaries, searchable excerpts, and exportable data files.
+
+The initiative is expected to improve review speed, reduce duplicated work, and create a more auditable process for document-heavy workflows. The first phase should focus on low-risk internal documents before expanding to customer-facing or regulated materials.
+
+Background
+
+The company currently reviews vendor proposals, policy updates, and operating memos through a mostly manual process. Analysts read each document, summarize key points, identify risks, and copy important information into spreadsheets. This process creates delays and makes it difficult to confirm how a conclusion was reached.
+
+The proposed document intelligence workflow would extract text from PDFs and plain text files, split the content into searchable chunks, identify key dates and entities, and generate a structured intelligence report.
+
+Key Facts
+
+The pilot project is scheduled to begin in Q2 2026.
+The first review checkpoint is April 30, 2026.
+The target users are operations analysts, compliance reviewers, and department managers.
+The system should support PDF and plain text uploads during the first phase.
+The output should include JSON and CSV files for auditability.
+
+Risks and Issues
+
+There is a risk that scanned PDFs may not contain selectable text and may require OCR in a future version.
+There is a concern that automatic summaries could miss context if the source document is poorly formatted.
+The team must avoid uploading confidential customer documents during the pilot.
+A dependency exists on clear user instructions and careful review of generated outputs.
+
+Recommendations and Action Items
+
+The team should begin with synthetic and internal non-confidential documents.
+The project owner must review extraction quality before relying on the generated summary.
+The next step is to test the prototype on sample memos, vendor proposals, and policy documents.
+Management should approve a limited pilot before expanding the workflow.
