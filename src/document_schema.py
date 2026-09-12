@@ -1,4 +1,5 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -11,9 +12,19 @@ class DocumentMetadata(BaseModel):
 
 
 class DocumentChunk(BaseModel):
-    chunk_id: int
-    page_number: int
+    chunk_id: int = Field(ge=1)
+    page_number: int = Field(ge=1)
     text: str
+
+
+class DocumentFinding(BaseModel):
+    """A structured finding that remains traceable to the source document."""
+
+    finding_id: str
+    category: Literal["key_fact", "entity", "date", "risk", "action_item"]
+    text: str
+    page_number: int = Field(ge=1)
+    chunk_id: Optional[int] = Field(default=None, ge=1)
 
 
 class DocumentSummary(BaseModel):
@@ -23,6 +34,7 @@ class DocumentSummary(BaseModel):
     important_dates: List[str] = Field(default_factory=list)
     risks_or_issues: List[str] = Field(default_factory=list)
     action_items: List[str] = Field(default_factory=list)
+    findings: List[DocumentFinding] = Field(default_factory=list)
 
 
 class TableExtraction(BaseModel):
@@ -36,3 +48,14 @@ class DocumentIntelligenceReport(BaseModel):
     summary: DocumentSummary
     chunks: List[DocumentChunk]
     tables: List[TableExtraction] = Field(default_factory=list)
+
+
+class DocumentProcessingEvent(BaseModel):
+    """Observable event emitted by the real deterministic document pipeline."""
+
+    event: str
+    message: str
+    page_count: Optional[int] = None
+    chunk_count: Optional[int] = None
+    finding_count: Optional[int] = None
+    report: Optional[DocumentIntelligenceReport] = None
