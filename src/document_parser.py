@@ -3,7 +3,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import List, Tuple
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from src.document_schema import (
     DocumentChunk,
@@ -19,7 +19,7 @@ def extract_text_from_pdf(file_path: str) -> Tuple[List[str], str]:
     """Extract text from a PDF and return page texts plus extraction notes."""
     page_texts = []
 
-    with fitz.open(file_path) as doc:
+    with pymupdf.open(file_path) as doc:
         for page in doc:
             text = page.get_text("text")
             page_texts.append(text.strip())
@@ -97,9 +97,12 @@ def find_dates(text: str) -> List[str]:
 
 
 def find_entities(text: str) -> List[str]:
-    """Find simple capitalized entity-like phrases."""
-    candidates = re.findall(r"\b[A-Z][A-Za-z&.-]*(?:\s+[A-Z][A-Za-z&.-]*){0,4}\b", text)
-    stopwords = {
+    """Find simple capitalized entity-like phrases without joining across line breaks."""
+    candidates = re.findall(
+        r"\b[A-Z][A-Za-z&.-]*(?:[ \t]+[A-Z][A-Za-z&.-]*){0,4}\b",
+        text,
+    )
+    stopphrases = {
         "The",
         "This",
         "That",
@@ -110,12 +113,19 @@ def find_entities(text: str) -> List[str]:
         "Action",
         "Issue",
         "Risk",
+        "Executive Summary",
+        "Key Facts",
+        "Risks and Issues",
+        "Recommendations and Action Items",
+        "Internal Business Memo",
+        "Date",
+        "Prepared",
     }
 
     entities = []
     for item in candidates:
         cleaned = item.strip()
-        if cleaned not in stopwords and len(cleaned) > 2:
+        if cleaned not in stopphrases and len(cleaned) > 2:
             entities.append(cleaned)
 
     unique_entities = []
@@ -127,8 +137,16 @@ def find_entities(text: str) -> List[str]:
 
 
 def sentence_matches_keywords(sentence: str, keywords: List[str]) -> bool:
+    """Match whole-word cues and explicit phrases instead of accidental substrings."""
     lower = sentence.lower()
-    return any(keyword in lower for keyword in keywords)
+    for keyword in keywords:
+        normalized = keyword.lower()
+        if " " in normalized:
+            if normalized in lower:
+                return True
+        elif re.search(rf"\b{re.escape(normalized)}\b", lower):
+            return True
+    return False
 
 
 def build_summary(full_text: str) -> DocumentSummary:
@@ -153,9 +171,9 @@ def build_summary(full_text: str) -> DocumentSummary:
         for s in sentences
         if sentence_matches_keywords(
             s,
-            ["should", "must", "recommend", "next step", "action", "approve", "review", "complete"],
+            ["should", "must", "recommend", "next step", "action", "approve", "needs to", "required to"],
         )
-    ][:5]
+    ][:8]
 
     return DocumentSummary(
         executive_summary=executive_summary,
