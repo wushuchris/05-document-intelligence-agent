@@ -21,6 +21,22 @@ def chunks_to_dataframe(report: DocumentIntelligenceReport) -> pd.DataFrame:
     return pd.DataFrame([chunk.model_dump() for chunk in report.chunks])
 
 
+def findings_to_dataframe(report: DocumentIntelligenceReport) -> pd.DataFrame:
+    """Convert source-linked structured findings into a dataframe."""
+    rows = []
+    for finding in report.summary.findings:
+        rows.append(
+            {
+                "finding_id": finding.finding_id,
+                "category": finding.category.replace("_", " ").title(),
+                "finding": finding.text,
+                "page": finding.page_number,
+                "chunk": finding.chunk_id,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def metadata_to_dataframe(report: DocumentIntelligenceReport) -> pd.DataFrame:
     """Convert metadata into a dataframe."""
     return pd.DataFrame([report.metadata.model_dump()])
@@ -28,7 +44,7 @@ def metadata_to_dataframe(report: DocumentIntelligenceReport) -> pd.DataFrame:
 
 def summary_to_dataframe(report: DocumentIntelligenceReport) -> pd.DataFrame:
     """Convert summary fields into a simple dataframe."""
-    summary = report.summary.model_dump()
+    summary = report.summary.model_dump(exclude={"findings"})
 
     rows = []
     for field, value in summary.items():
