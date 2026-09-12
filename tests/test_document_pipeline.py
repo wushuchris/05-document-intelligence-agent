@@ -120,3 +120,27 @@ def test_empty_text_document_returns_safe_empty_intelligence(tmp_path):
     assert report.summary.executive_summary == "No usable text was extracted from the document."
     assert report.summary.findings == []
     assert report.chunks == []
+
+
+def test_completed_work_is_not_misclassified_as_pending_action(tmp_path):
+    file_path = tmp_path / "completed.txt"
+    file_path.write_text(
+        "Orion Facilities completed the lobby repainting project. Employees attended the quarterly event.",
+        encoding="utf-8",
+    )
+
+    report = parse_document(str(file_path))
+
+    assert report.summary.action_items == []
+
+
+def test_directive_language_is_extracted_as_action_item(tmp_path):
+    file_path = tmp_path / "directive.txt"
+    file_path.write_text(
+        "The compliance lead should review exceptions before approval.",
+        encoding="utf-8",
+    )
+
+    report = parse_document(str(file_path))
+
+    assert report.summary.action_items == ["The compliance lead should review exceptions before approval."]
