@@ -1,4 +1,5 @@
 import re
+from collections.abc import Iterator
 from pathlib import Path
 from typing import List, Tuple
 
@@ -6,8 +7,10 @@ import fitz  # PyMuPDF
 
 from src.document_schema import (
     DocumentChunk,
+    DocumentFinding,
     DocumentIntelligenceReport,
     DocumentMetadata,
+    DocumentProcessingEvent,
     DocumentSummary,
 )
 
@@ -137,7 +140,8 @@ def build_summary(full_text: str) -> DocumentSummary:
     key_facts = sentences[:5]
 
     risks = [
-        s for s in sentences
+        s
+        for s in sentences
         if sentence_matches_keywords(
             s,
             ["risk", "issue", "concern", "delay", "constraint", "challenge", "exposure", "dependency"],
@@ -145,7 +149,8 @@ def build_summary(full_text: str) -> DocumentSummary:
     ][:5]
 
     action_items = [
-        s for s in sentences
+        s
+        for s in sentences
         if sentence_matches_keywords(
             s,
             ["should", "must", "recommend", "next step", "action", "approve", "review", "complete"],
@@ -162,10 +167,88 @@ def build_summary(full_text: str) -> DocumentSummary:
     )
 
 
-def parse_document(file_path: str) -> DocumentIntelligenceReport:
-    """Parse a PDF or TXT file into a structured intelligence report."""
+def _normalize(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _source_location(text: str, page_texts: List[str], chunks: List[DocumentChunk]) -> tuple[int | None, int | None]:
+    """Find the source page and best matching chunk for an extracted item without inventing provenance."""
+    normalized = _normalize(text)
+    if not normalized:
+        return None, None
+
+    page_number: int | None = None
+    for index, page_text in enumerate(page_texts, start=1):
+        if normalized in _normalize(page_text):
+            page_number = index
+            break
+
+    if page_number is None:
+        return None, None
+
+    same_page_chunks = [chunk for chunk in chunks if chunk.page_number == page_number]
+    for chunk in same_page_chunks:
+        if normalized in _normalize(chunk.text):
+            return page_number, chunk.chunk_id
+
+    item_terms = set(re.findall(r"[a-zA-Z0-9]+", normalized))
+    best_chunk_id: int | None = None
+    best_overlap = 0
+    for chunk in same_page_chunks:
+        chunk_terms = set(re.findall(r"[a-zA-Z0-9]+", _normalize(chunk.text)))
+        overlap = len(item_terms & chunk_terms)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_chunk_id = chunk.chunk_id
+
+    return page_number, best_chunk_id if best_overlap > 0 else None
+
+
+def build_findings(
+    summary: DocumentSummary,
+    page_texts: List[str],
+    chunks: List[DocumentChunk],
+) -> List[DocumentFinding]:
+    """Attach deterministic source page/chunk lineage to structured summary items."""
+    groups = [
+        ("key_fact", "FACT", summary.key_facts),
+        ("entity", "ENTITY", summary.key_entities),
+        ("date", "DATE", summary.important_dates),
+        ("risk", "RISK", summary.risks_or_issues),
+        ("action_item", "ACTION", summary.action_items),
+    ]
+
+    findings: List[DocumentFinding] = []
+    for category, prefix, items in groups:
+        category_index = 1
+        for item in items:
+            page_number, chunk_id = _source_location(item, page_texts, chunks)
+            if page_number is None:
+                continue
+
+            findings.append(
+                DocumentFinding(
+                    finding_id=f"{prefix}-{category_index:02d}",
+                    category=category,
+                    text=item,
+                    page_number=page_number,
+                    chunk_id=chunk_id,
+                )
+            )
+            category_index += 1
+
+    return findings
+
+
+def parse_document_iter(file_path: str) -> Iterator[DocumentProcessingEvent]:
+    """Yield real stages from the deterministic document-intelligence pipeline."""
     path = Path(file_path)
     suffix = path.suffix.lower()
+
+    yield DocumentProcessingEvent(
+        event="document_received",
+        message=f"Document accepted for processing: {path.name}.",
+    )
 
     if suffix == ".pdf":
         page_texts, notes = extract_text_from_pdf(str(path))
@@ -177,7 +260,31 @@ def parse_document(file_path: str) -> DocumentIntelligenceReport:
         raise ValueError("Unsupported file type. Please upload a PDF or TXT file.")
 
     full_text = "\n\n".join(page_texts).strip()
+
+    yield DocumentProcessingEvent(
+        event="text_extracted",
+        message=f"Text extraction complete across {len(page_texts)} page(s). {notes}",
+        page_count=len(page_texts),
+    )
+
     chunks = chunk_pages(page_texts)
+    yield DocumentProcessingEvent(
+        event="chunks_created",
+        message=f"Created {len(chunks)} page-aware searchable chunk(s).",
+        page_count=len(page_texts),
+        chunk_count=len(chunks),
+    )
+
+    summary = build_summary(full_text)
+    summary.findings = build_findings(summary, page_texts, chunks)
+
+    yield DocumentProcessingEvent(
+        event="structure_extracted",
+        message=f"Extracted {len(summary.findings)} structured finding(s) with source lineage.",
+        page_count=len(page_texts),
+        chunk_count=len(chunks),
+        finding_count=len(summary.findings),
+    )
 
     metadata = DocumentMetadata(
         file_name=path.name,
@@ -187,11 +294,31 @@ def parse_document(file_path: str) -> DocumentIntelligenceReport:
         parsing_notes=notes,
     )
 
-    summary = build_summary(full_text)
-
-    return DocumentIntelligenceReport(
+    report = DocumentIntelligenceReport(
         metadata=metadata,
         summary=summary,
         chunks=chunks,
         tables=[],
     )
+
+    yield DocumentProcessingEvent(
+        event="report_completed",
+        message="Structured document intelligence report is ready for review, search, and export.",
+        page_count=len(page_texts),
+        chunk_count=len(chunks),
+        finding_count=len(summary.findings),
+        report=report,
+    )
+
+
+def parse_document(file_path: str) -> DocumentIntelligenceReport:
+    """Parse a PDF or TXT file and return the final report from the observable pipeline."""
+    final_report: DocumentIntelligenceReport | None = None
+    for event in parse_document_iter(file_path):
+        if event.report is not None:
+            final_report = event.report
+
+    if final_report is None:
+        raise RuntimeError("Document processing completed without producing a report.")
+
+    return final_report
